@@ -1,22 +1,42 @@
 # Transformer Architecture Reimplementation
 
-Implementation of Transformer Architecture from [Attention is All You Need](https://arxiv.org/abs/1706.03762). The Transformer architecture has revolutionized the field of sequence-to-sequence learning by replacing the traditional recurrent and convolutional neural network structures with a novel attention-based mechanism. This approach has proven to be highly effective in tasks such as machine translation, language modeling, and text generation, among others.
+This project implements the Transformer Architecture from [Attention is All You Need](https://arxiv.org/abs/1706.03762). The Transformer architecture has significantly impacted sequence-to-sequence learning by introducing an attention-based mechanism, replacing traditional recurrent and convolutional neural network structures. This approach has demonstrated remarkable effectiveness in various tasks including machine translation, language modeling, and text generation.
 
-![](img/attention_arch.jpeg)
+![Transformer Architecture](img/attention_arch.jpeg)
 
-## Install
+## Installation
+
+To install the necessary dependencies, run:
 
 ```
 pip install -r requirements.txt
 ```
 
-## Train the Model
+## Training the Model
+
+To train the model, execute the following command:
 
 ```
 python train.py
 ```
 
+During training, you will observe predictions from the model after each epoch:
+
+```
+Processing epoch 27: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 158/158 [00:51<00:00,  3.10it/s, loss=5.873]
+--------------------------------------------------------------------------------
+SOURCE: I'm sure I don't want to stay in here any longer!'
+TARGET: Eu só sei que não quero mais ficar aqui!'
+PREDICTED: Eu só sei que não quero mais ficar aqui!'
+```
+
+## Dataset
+
+This implementation uses the [Opus books dataset](https://huggingface.co/datasets/Helsinki-NLP/opus_books), a collection of copyright-free books aligned by Andras Farkas. The default translation direction is from English to Italian, but you can modify this setting in `config.py` to translate between any languages of your choice.
+
 ## Reference
+
+If you use this code in your research or find it helpful, please consider citing the original paper:
 
 ```
 @article{vaswani2017attention,
@@ -27,3 +47,5 @@ python train.py
     year    = {2017}
 }
 ```
+
+This README provides a simple guide to run the code and understand its functionality. If you encounter any issues or have questions, feel free to reach out!
