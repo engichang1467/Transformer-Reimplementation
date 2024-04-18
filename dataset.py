@@ -15,9 +15,15 @@ class BilingualDataset(Dataset):
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
 
-        self.sos_token = torch.tensor([tokenizer_tgt.token_to_id("[SOS]")], dtype=torch.int64)
-        self.eos_token = torch.tensor([tokenizer_tgt.token_to_id("[EOS]")], dtype=torch.int64)
-        self.pad_token = torch.tensor([tokenizer_tgt.token_to_id("[PAD]")], dtype=torch.int64)
+        self.sos_token = torch.tensor(
+            [tokenizer_tgt.token_to_id("[SOS]")], dtype=torch.int64
+        )
+        self.eos_token = torch.tensor(
+            [tokenizer_tgt.token_to_id("[EOS]")], dtype=torch.int64
+        )
+        self.pad_token = torch.tensor(
+            [tokenizer_tgt.token_to_id("[PAD]")], dtype=torch.int64
+        )
 
     def __len__(self):
         return len(self.ds)
@@ -42,7 +48,9 @@ class BilingualDataset(Dataset):
                 self.sos_token,
                 torch.tensor(enc_input_tokens, dtype=torch.int64),
                 self.eos_token,
-                torch.tensor([self.pad_token] * enc_num_padding_tokens, dtype=torch.int64)
+                torch.tensor(
+                    [self.pad_token] * enc_num_padding_tokens, dtype=torch.int64
+                ),
             ]
         )
 
@@ -51,7 +59,9 @@ class BilingualDataset(Dataset):
             [
                 self.sos_token,
                 torch.tensor(dec_input_tokens, dtype=torch.int64),
-                torch.tensor([self.pad_token] * dec_num_padding_tokens, dtype=torch.int64)
+                torch.tensor(
+                    [self.pad_token] * dec_num_padding_tokens, dtype=torch.int64
+                ),
             ]
         )
 
@@ -60,7 +70,9 @@ class BilingualDataset(Dataset):
             [
                 torch.tensor(dec_input_tokens, dtype=torch.int64),
                 self.eos_token,
-                torch.tensor([self.pad_token] * dec_num_padding_tokens, dtype=torch.int64)
+                torch.tensor(
+                    [self.pad_token] * dec_num_padding_tokens, dtype=torch.int64
+                ),
             ]
         )
 
@@ -69,13 +81,22 @@ class BilingualDataset(Dataset):
         assert label.size(0) == self.seq_len
 
         return {
-            "encoder_input": encoder_input, # (Seq_len)
-            "decoder_input": decoder_input, # (Seq_len)
-            "encoder_mask": (encoder_input != self.pad_token).unsqueeze(0).unsqueeze(0).int(), # (1, 1, Seq_len)
-            "decoder_mask": (decoder_input != self.pad_token).unsqueeze(0).unsqueeze(0).int() & casual_mask(decoder_input.size(0)), # (1, Seq_Len) & (1, Seq_Len, Seq_Len)
-            "label": label, # (Seq_Len),
+            "encoder_input": encoder_input,  # (Seq_len)
+            "decoder_input": decoder_input,  # (Seq_len)
+            "encoder_mask": (encoder_input != self.pad_token)
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .int(),  # (1, 1, Seq_len)
+            "decoder_mask": (decoder_input != self.pad_token)
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .int()
+            & casual_mask(
+                decoder_input.size(0)
+            ),  # (1, Seq_Len) & (1, Seq_Len, Seq_Len)
+            "label": label,  # (Seq_Len),
             "src_text": src_text,
-            "tgt_text": tgt_text
+            "tgt_text": tgt_text,
         }
 
 
