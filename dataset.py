@@ -4,8 +4,19 @@ from torch.utils.data import Dataset
 
 
 class BilingualDataset(Dataset):
+    """Dataset for a bilingual translation task."""
 
     def __init__(self, ds, tokenizer_src, tokenizer_tgt, src_lang, tgt_lang, seq_len):
+        """Initialize the BilingualDataset.
+
+        Args:
+            ds: The dataset containing bilingual translation pairs.
+            tokenizer_src: Tokenizer for source language.
+            tokenizer_tgt: Tokenizer for target language.
+            src_lang: Source language code.
+            tgt_lang: Target language code.
+            seq_len (int): Maximum sequence length.
+        """
         super().__init__()
 
         self.seq_len = seq_len
@@ -26,9 +37,19 @@ class BilingualDataset(Dataset):
         )
 
     def __len__(self):
+        """Get the length of the dataset."""
         return len(self.ds)
 
     def __getitem__(self, index: any):
+        """Get an item from the dataset.
+
+        Args:
+            index: Index of the item to retrieve.
+
+        Returns:
+            dict: Dictionary containing encoder input, decoder input, masks,
+                  label, and source/target texts.
+        """
         src_target_pair = self.ds[index]
         src_text = src_target_pair["translation"][self.src_lang]
         tgt_text = src_target_pair["translation"][self.tgt_lang]
@@ -101,5 +122,13 @@ class BilingualDataset(Dataset):
 
 
 def casual_mask(size):
+    """Generate a causal mask for self-attention.
+
+    Args:
+        size (int): The size of the mask.
+
+    Returns:
+        torch.Tensor: A causal mask tensor.
+    """
     mask = torch.triu(torch.ones(1, size, size), diagonal=1).type(torch.int)
     return mask == 0

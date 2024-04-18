@@ -23,6 +23,20 @@ from pathlib import Path
 def greedy_decode(
     model, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device
 ):
+    """Generate a translation using greedy decoding.
+
+    Args:
+        model (Transformer): The trained transformer model.
+        source (torch.Tensor): The input source sequence.
+        source_mask (torch.Tensor): The mask for the source sequence.
+        tokenizer_src: The source language tokenizer.
+        tokenizer_tgt: The target language tokenizer.
+        max_len (int): The maximum length of the output sequence.
+        device: The device on which the computation will be performed.
+
+    Returns:
+        torch.Tensor: The decoded sequence.
+    """
     sos_ids = tokenizer_tgt.token_to_id("[SOS]")
     eos_ids = tokenizer_tgt.token_to_id("[EOS]")
 
@@ -73,6 +87,20 @@ def run_validation(
     writer,
     num_examples=2,
 ):
+    """Run validation on the provided dataset.
+
+    Args:
+        model (Transformer): The trained transformer model.
+        validation_ds (Dataset): The dataset for validation.
+        tokenizer_src: The source language tokenizer.
+        tokenizer_tgt: The target language tokenizer.
+        max_len (int): The maximum length of the output sequence.
+        device: The device on which the computation will be performed.
+        print_msg: The function used to print messages.
+        global_state: Global state for controlling the process.
+        writer: The writer for logging.
+        num_examples (int, optional): The number of examples to process. Defaults to 2.
+    """
     model.eval()
     count = 0
 
@@ -103,10 +131,6 @@ def run_validation(
             target_text = batch["tgt_text"][0]
             model_out_text = tokenizer_tgt.decode(model_out.detach().cpu().numpy())
 
-            # source_texts.append(source_text)
-            # expected.append(target_text)
-            # predicted.append(model_out_text)
-
             # Print to the console
             print_msg("-" * console_width)
             print_msg(f"SOURCE: {source_text}")
@@ -121,11 +145,30 @@ def run_validation(
 
 
 def get_all_sentences(ds, lang):
+    """Generator function to yield all sentences in a dataset for a specific language.
+
+    Args:
+        ds: The dataset.
+        lang (str): The language code for the target language.
+
+    Yields:
+        str: Each sentence in the dataset for the specified language.
+    """
     for item in ds:
         yield item["translation"][lang]
 
 
 def get_or_build_tokenizer(config, ds, lang):
+    """Get or build a tokenizer for a specific language.
+
+    Args:
+        config (dict): Configuration parameters.
+        ds: The dataset.
+        lang (str): The language code for the target language.
+
+    Returns:
+        Tokenizer: The tokenizer for the specified language.
+    """
     tokenizer_path = Path(config["tokenizer_file"].format(lang))
     if not Path.exists(tokenizer_path):
         tokenizer = Tokenizer(WordLevel(unk_token="[UNK]"))
@@ -141,6 +184,17 @@ def get_or_build_tokenizer(config, ds, lang):
 
 
 def get_ds(config):
+    """Get the training and validation dataloaders along with tokenizers.
+
+    Args:
+        config (dict): Configuration parameters.
+
+    Returns:
+        DataLoader: The training dataloader.
+        DataLoader: The validation dataloader.
+        Tokenizer: The tokenizer for the source language.
+        Tokenizer: The tokenizer for the target language.
+    """
     ds_raw = load_dataset(
         "opus_books", f"{config['lang_src']}-{config['lang_tgt']}", split="train"
     )
@@ -192,6 +246,16 @@ def get_ds(config):
 
 
 def get_model(config, vocab_src_len, vocab_tgt_len):
+    """Builds and returns the Transformer model.
+
+    Args:
+        config (dict): Configuration parameters.
+        vocab_src_len (int): Length of the source vocabulary.
+        vocab_tgt_len (int): Length of the target vocabulary.
+
+    Returns:
+        Transformer: The Transformer model.
+    """
     model = build_transformer(
         vocab_src_len,
         vocab_tgt_len,
@@ -203,6 +267,11 @@ def get_model(config, vocab_src_len, vocab_tgt_len):
 
 
 def train_model(config):
+    """Trains the Transformer model.
+
+    Args:
+        config (dict): Configuration parameters.
+    """
     # Define the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device {device}")
@@ -274,7 +343,17 @@ def train_model(config):
 
             global_step += 1
 
-        # run_validation(model, val_dataloader, tokenizer_src, tokenizer_tgt, config["seq_len"], device, lambda msg: batch_iterator.write(msg), global_step, writer)
+        run_validation(
+            model,
+            val_dataloader,
+            tokenizer_src,
+            tokenizer_tgt,
+            config["seq_len"],
+            device,
+            lambda msg: batch_iterator.write(msg),
+            global_step,
+            writer,
+        )
 
         # Save the model at the end of every epoch
         model_filename = get_weights_file_path(config, f"{epoch:02d}")
