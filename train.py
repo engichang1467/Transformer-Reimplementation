@@ -13,6 +13,7 @@ from tokenizers.models import WordLevel
 from tokenizers.trainers import WordLevelTrainer
 from tokenizers.pre_tokenizers import Whitespace
 
+import torchmetrics
 from torch.utils.tensorboard import SummaryWriter
 
 import warnings
@@ -83,7 +84,7 @@ def run_validation(
     max_len,
     device,
     print_msg,
-    global_state,
+    global_step,
     writer,
     num_examples=2,
 ):
@@ -97,14 +98,14 @@ def run_validation(
         max_len (int): The maximum length of the output sequence.
         device: The device on which the computation will be performed.
         print_msg: The function used to print messages.
-        global_state: Global state for controlling the process.
+        global_step: Global state for controlling the process.
         writer: The writer for logging.
         num_examples (int, optional): The number of examples to process. Defaults to 2.
     """
     model.eval()
     count = 0
 
-    # source_texts, expected, predicted = [], [], []
+    source_texts, expected, predicted = [], [], []
 
     # Size of the control window (just use a default value)
     console_width = 80
@@ -131,6 +132,10 @@ def run_validation(
             target_text = batch["tgt_text"][0]
             model_out_text = tokenizer_tgt.decode(model_out.detach().cpu().numpy())
 
+            source_texts.append(source_text)
+            expected.append(target_text)
+            predicted.append(model_out_text)
+
             # Print to the console
             print_msg("-" * console_width)
             print_msg(f"SOURCE: {source_text}")
@@ -140,8 +145,25 @@ def run_validation(
             if count == num_examples:
                 break
 
-    # if writer:
-    #     # TorchMetrics CharErrprRate, BLUE, word errorrate
+    if writer:
+        # Evaluate the character error rate
+        # Compute the char error rate 
+        metric = torchmetrics.CharErrorRate()
+        cer = metric(predicted, expected)
+        writer.add_scalar('validation cer', cer, global_step)
+        writer.flush()
+
+        # Compute the word error rate
+        metric = torchmetrics.WordErrorRate()
+        wer = metric(predicted, expected)
+        writer.add_scalar('validation wer', wer, global_step)
+        writer.flush()
+
+        # Compute the BLEU metric
+        metric = torchmetrics.BLEUScore()
+        bleu = metric(predicted, expected)
+        writer.add_scalar('validation BLEU', bleu, global_step)
+        writer.flush()
 
 
 def get_all_sentences(ds, lang):
@@ -339,7 +361,7 @@ def train_model(config):
 
             # Update the weights
             optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             global_step += 1
 
