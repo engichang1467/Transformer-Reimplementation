@@ -34,7 +34,9 @@ PREDICTED: Eu só sei que não quero mais ficar aqui!'
 
 This implementation uses the [Opus books dataset](https://huggingface.co/datasets/Helsinki-NLP/opus_books), a collection of copyright-free books aligned by Andras Farkas. The default translation direction is from English to Italian, but you can modify this setting in `config.py` to translate between any languages of your choice.
 
-## Reference
+## References
+
+- [GitHub - pytorch-transformer](https://github.com/hkproj/pytorch-transformer)
 
 If you use this code in your research or find it helpful, please consider citing the original paper:
 
@@ -47,5 +49,3 @@ If you use this code in your research or find it helpful, please consider citing
     year    = {2017}
 }
 ```
-
-This README provides a simple guide to run the code and understand its functionality. If you encounter any issues or have questions, feel free to reach out!

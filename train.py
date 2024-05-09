@@ -15,19 +15,19 @@ from tokenizers.pre_tokenizers import Whitespace
 
 import torchmetrics
 from torch.utils.tensorboard import SummaryWriter
+import lightning as L
 
 import warnings
-from tqdm import tqdm
 from pathlib import Path
 
 
 def greedy_decode(
-    model, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device
+    lightning_mod, source, source_mask, tokenizer_src, tokenizer_tgt, max_len, device
 ):
     """Generate a translation using greedy decoding.
 
     Args:
-        model (Transformer): The trained transformer model.
+        lightning_mod (TransformerModule): THe Lightning Module for the transformer model.
         source (torch.Tensor): The input source sequence.
         source_mask (torch.Tensor): The mask for the source sequence.
         tokenizer_src: The source language tokenizer.
@@ -42,30 +42,30 @@ def greedy_decode(
     eos_ids = tokenizer_tgt.token_to_id("[EOS]")
 
     # Precompute the encoder output and reuse it for every token we get from the decoder
-    encoder_output = model.encode(source, source_mask)
+    encoder_output = lightning_mod.model.encode(source, source_mask)
 
     # Initizliae the decoder input with the sos token
-    decoder_input = torch.empty(1, 1).fill_(sos_ids).type_as(source).to(device)
+    decoder_input = torch.empty(1, 1).fill_(sos_ids).type_as(source)
     while True:
         if decoder_input.size(1) == max_len:
             break
 
         # Build mask for the target (decoder input)
-        decoder_mask = (
-            casual_mask(decoder_input.size(1)).type_as(source_mask).to(device)
-        )
+        decoder_mask = casual_mask(decoder_input.size(1)).type_as(source_mask)
 
         # Calculate the output of the decoder
-        output = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        output = lightning_mod.model.decode(
+            encoder_output, source_mask, decoder_input, decoder_mask
+        )
 
         # Get the next token
-        prob = model.project(output[:, -1])
+        prob = lightning_mod.model.project(output[:, -1])
         # Select the token with the max probability (because it is a greedy search)
         _, next_word = torch.max(prob, dim=1)
         decoder_input = torch.cat(
             [
                 decoder_input,
-                torch.empty(1, 1).type_as(source).fill_(next_word.item()).to(device),
+                torch.empty(1, 1).type_as(source).fill_(next_word.item()),
             ],
             dim=1,
         )
@@ -83,8 +83,6 @@ def run_validation(
     tokenizer_tgt,
     max_len,
     device,
-    print_msg,
-    global_step,
     writer,
     num_examples=2,
 ):
@@ -97,8 +95,6 @@ def run_validation(
         tokenizer_tgt: The target language tokenizer.
         max_len (int): The maximum length of the output sequence.
         device: The device on which the computation will be performed.
-        print_msg: The function used to print messages.
-        global_step: Global state for controlling the process.
         writer: The writer for logging.
         num_examples (int, optional): The number of examples to process. Defaults to 2.
     """
@@ -113,8 +109,8 @@ def run_validation(
     with torch.no_grad():
         for batch in validation_ds:
             count += 1
-            encoder_input = batch["encoder_input"].to(device)
-            encoder_mask = batch["encoder_mask"].to(device)
+            encoder_input = batch["encoder_input"]
+            encoder_mask = batch["encoder_mask"]
 
             assert encoder_input.size(0) == 1, "Batch size must be 1 for validation"
 
@@ -137,33 +133,13 @@ def run_validation(
             predicted.append(model_out_text)
 
             # Print to the console
-            print_msg("-" * console_width)
-            print_msg(f"SOURCE: {source_text}")
-            print_msg(f"TARGET: {target_text}")
-            print_msg(f"PREDICTED: {model_out_text}")
+            print("-" * console_width)
+            print(f"SOURCE: {source_text}")
+            print(f"TARGET: {target_text}")
+            print(f"PREDICTED: {model_out_text}")
 
             if count == num_examples:
                 break
-
-    if writer:
-        # Evaluate the character error rate
-        # Compute the char error rate 
-        metric = torchmetrics.CharErrorRate()
-        cer = metric(predicted, expected)
-        writer.add_scalar('validation cer', cer, global_step)
-        writer.flush()
-
-        # Compute the word error rate
-        metric = torchmetrics.WordErrorRate()
-        wer = metric(predicted, expected)
-        writer.add_scalar('validation wer', wer, global_step)
-        writer.flush()
-
-        # Compute the BLEU metric
-        metric = torchmetrics.BLEUScore()
-        bleu = metric(predicted, expected)
-        writer.add_scalar('validation BLEU', bleu, global_step)
-        writer.flush()
 
 
 def get_all_sentences(ds, lang):
@@ -303,91 +279,81 @@ def train_model(config):
     train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt = get_ds(config)
     model = get_model(
         config, tokenizer_src.get_vocab_size(), tokenizer_tgt.get_vocab_size()
-    ).to(device)
+    )
 
     # Tensorboard
     writer = SummaryWriter(config["experiment_name"])
 
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"], eps=1e-9)
 
-    initial_epoch, global_step = 0, 0
-
-    if config["preload"]:
-        model_filename = get_weights_file_path(config, config["preload"])
-        print(f"Preloading model {model_filename}")
-        state = torch.load(model_filename)
-        initial_epoch = state["epoch"] + 1
-        optimizer.load_state_dict(state["optimizer_state_dict"])
-        global_step = state["global_step"]
-
     loss_fn = nn.CrossEntropyLoss(
         ignore_index=tokenizer_src.token_to_id("[PAD]"), label_smoothing=0.1
-    ).to(device)
+    )
 
-    for epoch in range(initial_epoch, config["num_epochs"]):
-        torch.cuda.empty_cache()
-        model.train()
-        batch_iterator = tqdm(train_dataloader, desc=f"Processing epoch {epoch:02d}")
-        for batch in batch_iterator:
+    # Initialize the PyTorch Lightning Trainer
+    trainer = L.Trainer(
+        max_epochs=config["num_epochs"],
+        accelerator="auto",  # set to "auto" or "gpu" to use GPUs if available
+        devices="auto",  # Uses all available GPUs if applicable
+    )
 
-            encoder_input = batch["encoder_input"].to(device)  # (B, Seq_Len)
-            decoder_input = batch["decoder_input"].to(device)  # (B, Seq_Len)
-            encoder_mask = batch["encoder_mask"].to(device)  # (B, 1, 1, Seq_Len)
-            decoder_mask = batch["decoder_mask"].to(device)  # (B, 1, Seq_Len, Seq_Len)
+    # Define a LightningModule for the model
+    class TransformerModule(L.LightningModule):
+        def __init__(self, model, optimizer, loss_fn):
+            super().__init__()
+            self.model = model
+            self.optimizer = optimizer
+            self.loss_fn = loss_fn
 
-            # Run the tensors through the transformer
-            encoder_output = model.encode(
-                encoder_input, encoder_mask
-            )  # (B, Seq_Len, d_model)
-            decoder_output = model.decode(
+        def forward(self, encoder_input, decoder_input, encoder_mask, decoder_mask):
+            encoder_output = self.model.encode(encoder_input, encoder_mask)
+            decoder_output = self.model.decode(
                 encoder_output, encoder_mask, decoder_input, decoder_mask
-            )  # (B, SeqLen, d_model)
-            proj_output = model.project(decoder_output)  # (B, SeqLen, tgt_vocab_site)
-
-            label = batch["label"].to(device)  # (B, Seq_Len)
-
-            # (B< Seq_Len, tgt_vocab_size) --> (B * Seq_Len, tgt_vocab_size)
-            loss = loss_fn(
-                proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1)
             )
-            batch_iterator.set_postfix({f"loss": f"{loss.item():6.3f}"})
+            proj_output = self.model.project(decoder_output)
+            return proj_output
 
-            # Log the loss
-            writer.add_scalar("train loss", loss.item(), global_step)
-            writer.flush()
+        def training_step(self, batch, idx):
+            encoder_input = batch["encoder_input"]
+            decoder_input = batch["decoder_input"]
+            encoder_mask = batch["encoder_mask"]
+            decoder_mask = batch["decoder_mask"]
 
-            # Backpropagate the loss
-            loss.backward()
+            decoder_output = self(
+                encoder_input, decoder_input, encoder_mask, decoder_mask
+            )
 
-            # Update the weights
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
+            label = batch["label"]
 
-            global_step += 1
+            loss = self.loss_fn(
+                decoder_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1)
+            )
 
-        run_validation(
-            model,
-            val_dataloader,
-            tokenizer_src,
-            tokenizer_tgt,
-            config["seq_len"],
-            device,
-            lambda msg: batch_iterator.write(msg),
-            global_step,
-            writer,
-        )
+            self.log("train_loss", loss)
+            return loss
 
-        # Save the model at the end of every epoch
-        model_filename = get_weights_file_path(config, f"{epoch:02d}")
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "global_Step": global_step,
-            },
-            model_filename,
-        )
+        def configure_optimizers(self):
+            return self.optimizer
+
+    # Move the model to the appropriate device
+    model = TransformerModule(model, optimizer, loss_fn)
+
+    # Train the model using the PyTorch Lightning Trainer
+    trainer.fit(model, train_dataloader)
+
+    run_validation(
+        model,
+        val_dataloader,
+        tokenizer_src,
+        tokenizer_tgt,
+        config["seq_len"],
+        device,
+        writer,
+    )
+
+    # Save the trained model
+    model_filename = get_weights_file_path(config, "final")
+    torch.save(model.state_dict(), model_filename)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 torch
+lightning
 transformers[torch]
 datasets
 pandas
