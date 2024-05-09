@@ -155,7 +155,12 @@ class FeedForwardBlock(Module):
 
         """
         # (Batch, Seq_Len, d_model) --> (Batch, Seq_Len, d_ff) --> (Batch, Seq_Len, d_model)
-        return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
+        x = self.linear_1(x)
+        x = torch.relu(x)
+        x = self.dropout(x)
+        x = self.linear_2(x)
+
+        return x
 
 
 class MultiHeadAttentionBlock(Module):
