@@ -1,6 +1,7 @@
 torch
 lightning
 transformers[torch]
+tensorboard
 datasets
 pandas
 numpy
