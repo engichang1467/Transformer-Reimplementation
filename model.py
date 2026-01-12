@@ -102,7 +102,7 @@ class LayerNormalization(Module):
 
     """
 
-    def __init__(self, feature: int, eps: float = 10**6):
+    def __init__(self, feature: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
         self.alpha = Parameter(torch.ones(feature))  # Multiplied
@@ -216,7 +216,7 @@ class MultiHeadAttentionBlock(Module):
         # (Batch, h, Seq_len, d_k) --> (Batch, h, Seq_Len, Seq_Len)
         attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
         if mask is not None:
-            attention_scores.masked_fill_(mask == 0, -1e9)
+            attention_scores.masked_fill_(mask == 0, -1e4)
         attention_scores = attention_scores.softmax(
             dim=-1
         )  # (Batch, h, seq_len, seq_len)

@@ -236,9 +236,9 @@ def get_ds(config):
     print(f"Max length of target sentence: {max_len_tgt}")
 
     train_dataloader = DataLoader(
-        train_ds, batch_size=config["batch_size"], shuffle=True
+        train_ds, batch_size=config["batch_size"], shuffle=True, num_workers=4, pin_memory=True
     )
-    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=True)
+    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=True, num_workers=4, pin_memory=True)
 
     return train_dataloader, val_dataloader, tokenizer_src, tokenizer_tgt
 
@@ -287,7 +287,7 @@ def train_model(config):
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"], eps=1e-9)
 
     loss_fn = nn.CrossEntropyLoss(
-        ignore_index=tokenizer_src.token_to_id("[PAD]"), label_smoothing=0.1
+        ignore_index=tokenizer_tgt.token_to_id("[PAD]"), label_smoothing=0.1
     )
 
     # Initialize the PyTorch Lightning Trainer
@@ -295,6 +295,7 @@ def train_model(config):
         max_epochs=config["num_epochs"],
         accelerator="auto",  # set to "auto" or "gpu" to use GPUs if available
         devices="auto",  # Uses all available GPUs if applicable
+        precision="16-mixed",
     )
 
     # Define a LightningModule for the model
